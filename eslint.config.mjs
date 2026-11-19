@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Kode arsip, tidak ikut build (lihat src/_legacy/README.md).
+    "src/_legacy/**",
   ]),
 ]);
 
