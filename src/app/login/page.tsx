@@ -18,7 +18,7 @@ export default function LoginPage() {
 
     const ok = login(username, password);
     if (!ok) {
-      setError('Kredensial tidak valid. Gunakan admin/admin atau warga/warga.');
+      setError('Kredensial tidak valid. Gunakan admin/admin.');
       setLoading(false);
     }
   };
@@ -107,7 +107,7 @@ export default function LoginPage() {
           </div>
           <h1 style={{ fontSize: 24, fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>EcoSort AI</h1>
           <p style={{ fontSize: 13, color: '#a7f3d0', marginTop: 4 }}>
-            Login Admin & Warga — Smart Waste Vending Machine
+            Login Admin — Smart Waste Vending Machine
           </p>
         </div>
 
@@ -146,7 +146,7 @@ export default function LoginPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin atau warga"
+              placeholder="admin"
               required
               style={{
                 width: '100%',
@@ -222,12 +222,12 @@ export default function LoginPage() {
           <div style={{ fontSize: 11, color: '#6ee7b7', marginBottom: 10, textAlign: 'center', fontFamily: "'JetBrains Mono', monospace" }}>
             AKSES CEPAT SEKALI KLIK:
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
             <button
               type="button"
               onClick={() => handleQuickLogin('admin', 'admin')}
               style={{
-                padding: '10px 8px',
+                padding: '10px 24px',
                 background: 'rgba(16, 185, 129, 0.15)',
                 border: '1px solid rgba(52, 211, 153, 0.35)',
                 borderRadius: 8,
@@ -241,26 +241,6 @@ export default function LoginPage() {
             >
               🛡 ADMIN<br />
               <span style={{ fontSize: 10, opacity: 0.7 }}>admin / admin</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('warga', 'warga')}
-              style={{
-                padding: '10px 8px',
-                background: 'rgba(59, 130, 246, 0.15)',
-                border: '1px solid rgba(96, 165, 250, 0.35)',
-                borderRadius: 8,
-                color: '#bfdbfe',
-                fontSize: 11,
-                fontWeight: 600,
-                cursor: 'pointer',
-                textAlign: 'center',
-                fontFamily: "'JetBrains Mono', monospace"
-              }}
-            >
-              👤 WARGA<br />
-              <span style={{ fontSize: 10, opacity: 0.7 }}>warga / warga</span>
             </button>
           </div>
         </div>

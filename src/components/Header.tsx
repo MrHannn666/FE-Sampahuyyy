@@ -9,17 +9,6 @@ const BREADCRUMBS: Record<string, string> = {
   '/admin': 'DASHBOARD_ANALITIK',
   '/admin/mesin': 'KELOLA_MESIN_REWARD',
   '/admin/transaksi': 'TRANSAKSI_EXPORT',
-  '/admin/triase': 'PEMISAHAN_LANGSUNG',
-  '/admin/buku-besar': 'BUKU_BESAR_BATCH',
-  '/admin/gudang': 'RINGKASAN_GUDANG',
-  '/admin/konfigurasi-warga': 'KONFIGURASI_WARGA',
-  '/admin/master-data': 'MASTER_DATA_SISTEM',
-  '/warga': 'TRIASE_LANGSUNG',
-  '/warga/buku-besar': 'BUKU_BESAR_SETORAN',
-  '/warga/hasil-optik': 'HASIL_OPTIK_AI',
-  '/warga/pencetakan-token': 'PENCETAKAN_TOKEN',
-  '/warga/pemeriksaan': 'PEMERIKSAAN_KAMERA_AI',
-  '/warga/jadwal-penjemputan': 'JADWAL_PENJEMPUTAN',
 };
 
 export default function Header() {

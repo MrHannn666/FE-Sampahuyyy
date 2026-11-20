@@ -290,7 +290,7 @@ export default function KioskContent() {
             machine ? `${machine.id} — ${machine.location}` : 'MESIN BELUM DIATUR'
           )}
         </span>
-        <Link href="/login" style={{ color: '#6ee7b7', opacity: 0.7 }}>LOGIN ADMIN / WARGA →</Link>
+        <Link href="/login" style={{ color: '#6ee7b7', opacity: 0.7 }}>LOGIN ADMIN →</Link>
       </div>
 
       <div style={panelStyle}>

@@ -3,12 +3,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 /**
- * Dua role:
- * - admin: konsol operasional mesin & bank sampah (/admin)
- * - warga: dashboard warga (/warga)
- * Layar kiosk mesin (/) tetap terbuka tanpa login.
+ * Satu role: admin — konsol operasional mesin & bank sampah (/admin).
+ * Warga tidak perlu login; interaksi lewat layar kiosk mesin (/).
  */
-export type UserRole = 'admin' | 'warga';
+export type UserRole = 'admin';
 
 export interface User {
   username: string;
@@ -33,7 +31,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function isValidUser(value: Partial<User>): value is User {
   return (
-    (value.role === 'admin' || value.role === 'warga') &&
+    value.role === 'admin' &&
     typeof value.username === 'string' &&
     typeof value.name === 'string' &&
     typeof value.node === 'string' &&
@@ -85,28 +83,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
 
-    if (u === 'warga' && p === 'warga') {
-      const wargaUser: User = {
-        username: 'warga',
-        role: 'warga',
-        name: 'Budi Santoso',
-        nik: '3174-88902-1004',
-        node: 'NODE // 04-BKK',
-        balance: 1450,
-      };
-      setUser(wargaUser);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(wargaUser));
-      window.location.href = '/warga';
-      return true;
-    }
-
     return false;
   };
 
   const logout = () => {
     localStorage.removeItem(STORAGE_KEY);
     setUser(null);
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   const updateBalance = (delta: number) => {

@@ -98,41 +98,9 @@ const adminSections: NavSection[] = [
       { href: '/admin/transaksi', label: 'Transaksi & Export', icon: icons.file },
     ],
   },
-  {
-    title: 'Modul Operasional',
-    links: [
-      { href: '/admin/triase', label: 'Pemisahan Langsung', icon: icons.camera },
-      { href: '/admin/buku-besar', label: 'Buku Besar Batch', icon: icons.book },
-      { href: '/admin/gudang', label: 'Ringkasan & Gudang', icon: icons.globe },
-    ],
-  },
-  {
-    title: 'Diagnostik Sistem',
-    links: [
-      { href: '/admin/konfigurasi-warga', label: 'Konfigurasi Warga', icon: icons.users },
-      { href: '/admin/master-data', label: 'Master Data Sistem', icon: icons.machine },
-    ],
-  },
 ];
 
-const wargaSections: NavSection[] = [
-  {
-    title: 'Modul Utama',
-    links: [
-      { href: '/warga', label: 'Triase Langsung', icon: icons.grid },
-      { href: '/warga/buku-besar', label: 'Buku Besar Setoran', icon: icons.book },
-      { href: '/warga/hasil-optik', label: 'Hasil Optik AI', icon: icons.optic },
-      { href: '/warga/pencetakan-token', label: 'Pencetakan Token', icon: icons.token },
-    ],
-  },
-  {
-    title: 'Layanan & Diagnostik',
-    links: [
-      { href: '/warga/pemeriksaan', label: 'Pemeriksaan Kamera AI', icon: icons.camera },
-      { href: '/warga/jadwal-penjemputan', label: 'Jadwal Penjemputan Kurir', icon: icons.truck },
-    ],
-  },
-];
+const wargaSections: NavSection[] = [];
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -146,7 +114,7 @@ export default function Sidebar() {
         <div className="sidebar-logo-icon">♻</div>
         <div className="sidebar-logo-text">
           <h1>EcoSort AI</h1>
-          <p>{isAdmin ? 'Smart Waste Vending' : user?.node}</p>
+          <p>Smart Waste Vending</p>
         </div>
       </div>
 
@@ -167,16 +135,6 @@ export default function Sidebar() {
           </nav>
         </div>
       ))}
-
-      <div className="sidebar-section">
-        <div className="sidebar-section-title">Mesin</div>
-        <nav className="sidebar-nav">
-          <Link href="/" className="sidebar-link">
-            {icons.phone}
-            Buka Layar Pelanggan
-          </Link>
-        </nav>
-      </div>
 
       <div className="sidebar-footer">
         <span className="status-dot" />

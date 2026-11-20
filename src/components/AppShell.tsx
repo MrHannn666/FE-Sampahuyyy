@@ -12,8 +12,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   const inAdminArea = pathname.startsWith('/admin');
-  // Role guard: admin hanya di /admin, warga hanya di /warga.
-  const allowed = !!user && (user.role === 'admin' ? inAdminArea : !inAdminArea);
+  // Role guard: hanya admin yang boleh masuk.
+  const allowed = !!user && user.role === 'admin' && inAdminArea;
 
   useEffect(() => {
     if (isLoading) return;
@@ -24,7 +24,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
 
     if (!allowed) {
-      router.push(user.role === 'admin' ? '/admin' : '/warga');
+      router.push('/admin');
     }
   }, [user, isLoading, allowed, router]);
 
