@@ -8,31 +8,21 @@ import {
   addTransaction,
   generateTransactionId,
   resolveKioskMachine,
-  rewardFor,
   setKioskMachineId,
   useKioskMachineId,
   useMachines,
   type Classification,
-  type Machine,
-  type TransactionStatus,
 } from '@/lib/store';
+import {
+  validateAuth,
+  scanImage,
+  createWithdrawal,
+  getWithdrawalStatus,
+  type ScanResponse,
+  type WithdrawalResponse,
+} from '@/lib/api';
 
 type Step = 'wallet' | 'disposal' | 'result';
-
-interface ScanResult {
-  label: string;
-  classification: Classification;
-  confidence: number;
-  simulated: boolean;
-}
-
-interface PayoutResult {
-  status: TransactionStatus;
-  reward: number;
-  gatewayRef: string;
-  message?: string;
-  logged: boolean;
-}
 
 const STEPS: { key: Step; label: string }[] = [
   { key: 'wallet', label: 'Pilih e-wallet' },
@@ -78,6 +68,16 @@ const secondaryButton: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+/** Convert base64 data URL ke Blob untuk FormData */
+function dataURLtoBlob(dataUrl: string): Blob {
+  const [meta, b64] = dataUrl.split(',');
+  const mime = meta.match(/:(.*?);/)?.[1] ?? 'image/jpeg';
+  const binary = atob(b64);
+  const arr = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
 export default function KioskContent() {
   const machines = useMachines();
   const selectedMachineId = useKioskMachineId();
@@ -90,10 +90,18 @@ export default function KioskContent() {
   const [phoneLocal, setPhoneLocal] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
 
+  // JWT dari /api/auth/validate
+  const [jwt, setJwt] = useState<string | null>(null);
+
   const [busy, setBusy] = useState(false);
   const [scanError, setScanError] = useState('');
-  const [scan, setScan] = useState<ScanResult | null>(null);
-  const [payout, setPayout] = useState<PayoutResult | null>(null);
+
+  // Hasil dari backend
+  const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
+  const [withdrawalResult, setWithdrawalResult] = useState<WithdrawalResponse | null>(null);
+  const [withdrawalError, setWithdrawalError] = useState('');
+  const [txStatus, setTxStatus] = useState<string | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -151,15 +159,18 @@ export default function KioskContent() {
     setPhoneInput('');
     setPhoneLocal(null);
     setFormError('');
-    setScan(null);
-    setPayout(null);
+    setJwt(null);
+    setScanResult(null);
+    setWithdrawalResult(null);
+    setWithdrawalError('');
+    setTxStatus(null);
     setScanError('');
     setCameraError('');
   };
 
-  // ---------- Langkah 1: pilih e-wallet & isi nomor ----------
+  // ---------- Langkah 1: validasi HP + wallet → JWT ----------
 
-  const handleWalletSubmit = (e: React.FormEvent) => {
+  const handleWalletSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ewallet) {
       setFormError('Pilih e-wallet terlebih dahulu.');
@@ -171,98 +182,80 @@ export default function KioskContent() {
       return;
     }
     setFormError('');
-    setPhoneLocal(normalized);
-    setStep('disposal');
-  };
+    setBusy(true);
 
-  // ---------- Langkah 2: buang sampah (include: klasifikasi ML) ----------
-
-  const classify = async (): Promise<ScanResult> => {
-    let res: Response;
     try {
-      res = await fetch('/api/classify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: captureFrame() }),
-      });
-    } catch {
-      throw new Error('Tidak dapat menghubungi server klasifikasi.');
+      const authRes = await validateAuth(normalized, ewallet);
+      setJwt(authRes.token);
+      setPhoneLocal(normalized);
+      setStep('disposal');
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Validasi gagal. Coba lagi.');
+    } finally {
+      setBusy(false);
     }
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.success) {
-      throw new Error(data?.error ?? 'Sampah gagal diklasifikasikan. Coba lagi.');
-    }
-    return {
-      label: data.label,
-      classification: data.classification,
-      confidence: data.confidence,
-      simulated: Boolean(data.simulated),
-    };
   };
 
-  // ---------- Langkah 3: terima saldo (extend: payment gateway) ----------
-
-  const pay = async (m: Machine, result: ScanResult, wallet: Ewallet, phone: string) => {
-    const reward = rewardFor(m, result.classification);
-    let status: TransactionStatus = 'BERHASIL';
-    let gatewayRef = '-';
-    let failureReason: string | undefined;
-
-    if (reward > 0) {
-      try {
-        const res = await fetch('/api/reward', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ewallet: wallet, phone, amount: reward }),
-        });
-        const data = await res.json().catch(() => null);
-        if (res.ok && data?.success) {
-          gatewayRef = data.gatewayRef;
-        } else {
-          status = 'GAGAL';
-          failureReason = data?.error ?? 'Ditolak oleh payment gateway.';
-        }
-      } catch {
-        status = 'GAGAL';
-        failureReason = 'Payment gateway tidak dapat dihubungi.';
-      }
-    }
-
-    const logged = addTransaction({
-      id: generateTransactionId(),
-      time: new Date().toISOString(),
-      machineId: m.id,
-      ewallet: wallet,
-      phoneMasked: maskPhone(phone),
-      classification: result.classification,
-      confidence: result.confidence,
-      reward,
-      status,
-      gatewayRef,
-      failureReason,
-    });
-
-    setPayout({ status, reward, gatewayRef, message: failureReason, logged });
-  };
+  // ---------- Langkah 2: scan sampah → klasifikasi ----------
+  // ---------- Langkah 3: withdrawal via Midtrans ----------
 
   const handleDispose = async () => {
-    if (!machine || !operational || !ewallet || !phoneLocal) return;
+    if (!machine || !operational || !ewallet || !phoneLocal || !jwt) return;
     setBusy(true);
     setScanError('');
+    setWithdrawalError('');
+
     try {
-      const result = await classify();
-      setScan(result);
-      await pay(machine, result, ewallet, phoneLocal);
+      // 2a. Capture gambar & kirim ke /api/scan
+      const frameData = captureFrame();
+      const imageBlob = frameData
+        ? dataURLtoBlob(frameData)
+        : new Blob([], { type: 'image/jpeg' }); // fallback jika kamera mati
+
+      const scanRes = await scanImage(jwt, imageBlob);
+      setScanResult(scanRes);
+
+      // 2b. Langsung ajukan withdrawal ke /api/withdrawals
+      const withdrawRes = await createWithdrawal(jwt, {
+        organic_value: scanRes.organic_value,
+        non_organic_value: scanRes.non_organic_value,
+        jenis_pembayaran: ewallet,
+        no_telp: phoneLocal,
+        scan_id: scanRes.scan_id,
+      });
+      setWithdrawalResult(withdrawRes);
+
+      const resolvedClass: Classification =
+        scanRes.organic_value > scanRes.non_organic_value ? 'organik' : 'non-organik';
+      addTransaction({
+        id: generateTransactionId(),
+        time: new Date().toISOString(),
+        machineId: machine.id,
+        ewallet,
+        phoneMasked: maskPhone(phoneLocal),
+        classification: resolvedClass,
+        confidence: withdrawRes.confidence ?? 0,
+        reward: withdrawRes.transfered_amount ?? 0,
+        status: 'BERHASIL',
+        gatewayRef: withdrawRes.referral_number || '-',
+      });
+
       stopCamera();
       setStep('result');
-    } catch (error) {
-      setScanError(error instanceof Error ? error.message : 'Terjadi kesalahan. Coba lagi.');
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Terjadi kesalahan. Coba lagi.');
     } finally {
       setBusy(false);
     }
   };
 
   const currentStepIndex = STEPS.findIndex((s) => s.key === step);
+
+  // Hitung total reward untuk tampilan
+  const totalReward = withdrawalResult?.transfered_amount ?? 0;
+  const classification = scanResult
+    ? (scanResult.organic_value > scanResult.non_organic_value ? 'organik' : 'non-organik')
+    : null;
 
   return (
     <div style={{
@@ -376,8 +369,8 @@ export default function KioskContent() {
 
             {formError && <Notice tone="error">{formError}</Notice>}
 
-            <button type="submit" disabled={!operational} style={{ ...primaryButton, opacity: operational ? 1 : 0.5 }}>
-              Lanjut →
+            <button type="submit" disabled={!operational || busy} style={{ ...primaryButton, opacity: operational && !busy ? 1 : 0.5 }}>
+              {busy ? 'MEMVALIDASI...' : 'Lanjut →'}
             </button>
           </form>
         )}
@@ -387,7 +380,7 @@ export default function KioskContent() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ fontSize: 12, fontFamily: mono, color: '#a7f3d0', display: 'flex', justifyContent: 'space-between' }}>
               <span>{ewallet} • {maskPhone(phoneLocal)}</span>
-              <button type="button" onClick={() => { stopCamera(); setStep('wallet'); }} style={{ ...secondaryButton, padding: '2px 10px', fontSize: 11 }} disabled={busy}>
+              <button type="button" onClick={() => { stopCamera(); setStep('wallet'); setJwt(null); }} style={{ ...secondaryButton, padding: '2px 10px', fontSize: 11 }} disabled={busy}>
                 Ubah
               </button>
             </div>
@@ -428,47 +421,63 @@ export default function KioskContent() {
         )}
 
         {/* Langkah 3 */}
-        {step === 'result' && scan && payout && (
+        {step === 'result' && withdrawalResult && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, textAlign: 'center' }}>
-            <div style={{ fontSize: 48 }}>{payout.status === 'BERHASIL' ? '✅' : '⚠️'}</div>
+            <div style={{ fontSize: 48 }}>✅</div>
 
             <div>
               <span style={{
                 display: 'inline-block', padding: '4px 14px', borderRadius: 100, fontSize: 12, fontWeight: 800, fontFamily: mono,
-                background: scan.classification === 'organik' ? 'rgba(16,185,129,0.25)' : 'rgba(59,130,246,0.25)',
-                color: scan.classification === 'organik' ? '#6ee7b7' : '#93c5fd',
+                background: classification === 'organik' ? 'rgba(16,185,129,0.25)' : 'rgba(59,130,246,0.25)',
+                color: classification === 'organik' ? '#6ee7b7' : '#93c5fd',
               }}>
-                {scan.classification.toUpperCase()}
+                {withdrawalResult.jenis_sampah?.toUpperCase() ?? classification?.toUpperCase()}
               </span>
               <div style={{ fontSize: 13, color: '#a7f3d0', marginTop: 8 }}>
-                {scan.label} • keyakinan {scan.confidence.toFixed(1)}%
+                {withdrawalResult.nama_sampah?.join(', ')} • keyakinan {(withdrawalResult.confidence ?? 0).toFixed(1)}%
               </div>
-              {scan.simulated && (
-                <div style={{ fontSize: 10, fontFamily: mono, color: '#fcd34d', marginTop: 4 }}>
-                  MODE SIMULASI — model ML belum terhubung, hasil acak
-                </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 13, color: '#a7f3d0' }}>Saldo terkirim ke {ewallet}</div>
+              <div style={{ fontSize: 40, fontWeight: 800 }}>{formatRupiah(totalReward)}</div>
+              {withdrawalResult.referral_number && (
+                <div style={{ fontSize: 11, fontFamily: mono, color: 'rgba(167,243,208,0.7)' }}>Ref: {withdrawalResult.referral_number}</div>
+              )}
+              {totalReward === 0 && (
+                <div style={{ fontSize: 12, color: '#fcd34d', marginTop: 4 }}>Jenis sampah ini belum diberi reward oleh admin.</div>
               )}
             </div>
 
-            {payout.status === 'BERHASIL' ? (
-              <div>
-                <div style={{ fontSize: 13, color: '#a7f3d0' }}>Saldo terkirim ke {ewallet}</div>
-                <div style={{ fontSize: 40, fontWeight: 800 }}>{formatRupiah(payout.reward)}</div>
-                {payout.gatewayRef !== '-' && (
-                  <div style={{ fontSize: 11, fontFamily: mono, color: 'rgba(167,243,208,0.7)' }}>Ref: {payout.gatewayRef}</div>
-                )}
-                {payout.reward === 0 && (
-                  <div style={{ fontSize: 12, color: '#fcd34d', marginTop: 4 }}>Jenis sampah ini belum diberi reward oleh admin.</div>
-                )}
+            {withdrawalError && <Notice tone="error">{withdrawalError}</Notice>}
+
+            {txStatus && (
+              <div style={{ fontSize: 12, fontFamily: mono, color: '#a7f3d0' }}>
+                Status transaksi: <strong>{txStatus}</strong>
               </div>
-            ) : (
-              <Notice tone="error">
-                Saldo gagal dikirim: {payout.message}. Sampah sudah tercatat; hubungi admin jika saldo dibutuhkan.
-              </Notice>
             )}
 
-            {!payout.logged && (
-              <Notice tone="warn">Transaksi tidak tersimpan di riwayat (penyimpanan browser penuh).</Notice>
+            {withdrawalResult.referral_number && (
+              <button
+                type="button"
+                disabled={checkingStatus}
+                onClick={async () => {
+                  const id = String(withdrawalResult.id ?? withdrawalResult.referral_number);
+                  setCheckingStatus(true);
+                  setWithdrawalError('');
+                  try {
+                    const res = await getWithdrawalStatus(id);
+                    setTxStatus(res.status);
+                  } catch (err) {
+                    setWithdrawalError(err instanceof Error ? err.message : 'Gagal cek status.');
+                  } finally {
+                    setCheckingStatus(false);
+                  }
+                }}
+                style={secondaryButton}
+              >
+                {checkingStatus ? 'MENGECEK...' : 'Cek Status Transaksi'}
+              </button>
             )}
 
             <button type="button" onClick={resetSession} style={primaryButton}>Transaksi baru</button>
